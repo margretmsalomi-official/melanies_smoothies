@@ -1,7 +1,7 @@
 # Import python packages
 import requests
 import streamlit as st
-import pandas as pd
+import pandas as pd  # Added Pandas
 from snowflake.snowpark.functions import col
 
 # Write directly to the app
@@ -15,10 +15,14 @@ st.write("The name on your smoothie will be : ", name_on_order)
 cnx = st.connection("snowflake")
 session = cnx.session()
 
-# UPDATE: Load both FRUIT_NAME and SEARCH_ON columns
+# 1. Load the Snowflake table
 my_dataframe = session.table("smoothies.public.fruit_options").select(col('FRUIT_NAME'), col('SEARCH_ON'))
 
+# 2. Convert the Snowflake Dataframe to a Pandas Dataframe so we can use .loc
+pd_df = my_dataframe.to_pandas()
+
 # Display FRUIT_NAME in the multiselect UI
+# We still use the original my_dataframe for the list of options
 ingredients_list = st.multiselect('Choose Up to 5 Ingredients:', my_dataframe, max_selections=5)
 
 if ingredients_list:
@@ -27,14 +31,13 @@ if ingredients_list:
     for fruit_chosen in ingredients_list:
         ingredients_string += fruit_chosen + ' '
         
-        # UPDATE: Find the SEARCH_ON value for the fruit_chosen
-        # This looks into our dataframe to find the match for the name shown in the UI
-        search_on_df = my_dataframe.filter(col('FRUIT_NAME') == fruit_chosen).to_pandas()
-        search_on = search_on_df.iloc[0]['SEARCH_ON']
+        # 3. Use the specific Pandas statement to get the "Search On" value
+        search_on = pd_df.loc[pd_df['FRUIT_NAME'] == fruit_chosen, 'SEARCH_ON'].iloc[0]
+        st.write('The search value for ', fruit_chosen, ' is ', search_on, '.')
         
         st.subheader(fruit_chosen + ' Nutrition Information')
         
-        # UPDATE: Use the 'search_on' variable in the API URL
+        # 4. Use the search_on variable for the API call
         smoothiefroot_response = requests.get("https://my.smoothiefroot.com/api/fruit/" + search_on)
         
         sf_df = st.dataframe(data=smoothiefroot_response.json(), use_container_width=True)
