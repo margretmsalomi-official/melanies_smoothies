@@ -6,7 +6,6 @@ from snowflake.snowpark.functions import col
 
 # Write directly to the app
 st.title(":cup_with_straw: Customize Your Smoothie :cup_with_straw:")
-
 st.write("Choose your favourite fruit")
 
 name_on_order = st.text_input("Name on Smoothie ")
@@ -16,29 +15,31 @@ st.write("The name on your smoothie will be : ", name_on_order)
 cnx = st.connection("snowflake")
 session = cnx.session()
 
-my_dataframe = session.table("smoothies.public.fruit_options").select(col('FRUIT_NAME'))
-ingredients_list = st.multiselect('Choose Up to 5 Ingredients:', my_dataframe)
+# UPDATE: Load both FRUIT_NAME and SEARCH_ON columns
+my_dataframe = session.table("smoothies.public.fruit_options").select(col('FRUIT_NAME'), col('SEARCH_ON'))
 
-if len(ingredients_list) > 5:
-    st.error('Please select no more than 5 ingredients!')
-elif ingredients_list:
+# Display FRUIT_NAME in the multiselect UI
+ingredients_list = st.multiselect('Choose Up to 5 Ingredients:', my_dataframe, max_selections=5)
+
+if ingredients_list:
     ingredients_string = ''
     
-    # Process each fruit chosen
     for fruit_chosen in ingredients_list:
         ingredients_string += fruit_chosen + ' '
         
-        # --- NEW DYNAMIC SECTION ---
+        # UPDATE: Find the SEARCH_ON value for the fruit_chosen
+        # This looks into our dataframe to find the match for the name shown in the UI
+        search_on_df = my_dataframe.filter(col('FRUIT_NAME') == fruit_chosen).to_pandas()
+        search_on = search_on_df.iloc[0]['SEARCH_ON']
+        
         st.subheader(fruit_chosen + ' Nutrition Information')
         
-        # We concatenate the fruit_chosen variable into the URL string
-        smoothiefroot_response = requests.get("https://my.smoothiefroot.com/api/fruit/" + fruit_chosen)
+        # UPDATE: Use the 'search_on' variable in the API URL
+        smoothiefroot_response = requests.get("https://my.smoothiefroot.com/api/fruit/" + search_on)
         
-        # Display the JSON data as a dataframe
         sf_df = st.dataframe(data=smoothiefroot_response.json(), use_container_width=True)
-        # ---------------------------
 
-    # Prepare the insert statement for Snowflake
+    # Prepare the insert statement
     my_insert_stmt = """ insert into smoothies.public.orders(ingredients,name_on_order)
                         values ('""" + ingredients_string + """','""" + name_on_order + """')"""
 
